@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Blightfall Lite Online Starter</title>
+<style>
+  :root{
+    --bg:#08110d; --panel:rgba(8,16,13,0.88); --line:rgba(160,255,190,0.14);
+    --text:#eaf9ef; --muted:#a5c8ae; --accent:#7dff9a; --accent2:#d7ff85; --danger:#ff8d8d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:radial-gradient(circle at top,#102019 0%,#050906 60%,#000 100%);font-family:Inter,system-ui,Arial,sans-serif;color:var(--text)}
+  #wrap{display:grid;grid-template-columns:330px 1fr;min-height:100vh}
+  #side{padding:16px;border-right:1px solid var(--line);background:var(--panel);backdrop-filter:blur(6px)}
+  #gameWrap{position:relative}
+  #game{display:block;width:100%;height:100vh}
+  .panel{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+  h1,h2,h3{margin:0 0 8px}
+  h1{font-size:22px}
+  h2{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent2)}
+  p,li{color:var(--muted);line-height:1.45}
+  input,button,textarea{width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:var(--text);padding:11px 12px;font:inherit}
+  textarea{min-height:110px;resize:vertical}
+  button{cursor:pointer;background:linear-gradient(180deg,#9dffb5,#66df86);color:#07210d;font-weight:900;border:0}
+  button.secondary{background:linear-gradient(180deg,#c7d2ff,#879cff);color:#081123}
+  button.ghost{background:rgba(255,255,255,.06);color:var(--text);border:1px solid rgba(255,255,255,.1)}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .small{font-size:12px;color:var(--muted)}
+  .pill{display:inline-block;padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.08);font-size:12px;margin:2px 6px 0 0}
+  #status{min-height:42px;white-space:pre-wrap}
+  #overlay{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+  .hud{min-width:260px;background:rgba(8,16,13,.82);border:1px solid var(--line);border-radius:14px;padding:12px;backdrop-filter:blur(6px)}
+  .hud .title{font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);margin-bottom:8px}
+  .stat{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin:4px 0}
+  .danger{color:var(--danger)}
+  .ok{color:var(--accent)}
+  .hidden{display:none !important}
+  @media (max-width: 900px){
+    #wrap{grid-template-columns:1fr}
+    #side{border-right:0;border-bottom:1px solid var(--line)}
+    #game{height:65vh}
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <aside id="side">
+    <div class="panel">
+      <h1>Blightfall Lite Online</h1>
+      <p>This is a GitHub Pages + Firebase starter for simple online co-op. The host runs the simulation, Firebase carries room data, and everyone joins with one room code.</p>
+      <div class="small">Replace the Firebase config block near the top of the script before uploading.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Player</h2>
+      <input id="nameInput" placeholder="Your name" maxlength="20" />
+      <div class="row" style="margin-top:10px">
+        <button id="hostBtn">Create Room</button>
+        <button id="joinBtn" class="secondary">Join Room</button>
+      </div>
+      <input id="roomInput" placeholder="Room code" maxlength="8" style="margin-top:10px;text-transform:uppercase" />
+      <div class="row" style="margin-top:10px">
+        <button id="readyBtn" class="ghost" disabled>Ready Up</button>
+        <button id="startBtn" disabled>Start Match</button>
+      </div>
+      <button id="leaveBtn" class="ghost" disabled style="margin-top:10px">Leave Room</button>
+    </div>
+
+    <div class="panel">
+      <h2>Room</h2>
+      <div class="stat"><span>Mode</span><strong id="modeText">Offline</strong></div>
+      <div class="stat"><span>Room</span><strong id="roomText">—</strong></div>
+      <div class="stat"><span>Role</span><strong id="roleText">—</strong></div>
+      <div class="stat"><span>Players</span><strong id="playersText">0</strong></div>
+      <div id="playerList" class="small"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Status</h2>
+      <div id="status">Paste your Firebase config first.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Controls</h2>
+      <div class="small">
+        <div><span class="pill">WASD</span> move</div>
+        <div><span class="pill">Space</span> burst ability</div>
+        <div><span class="pill">Host</span> creates room and starts</div>
+      </div>
+    </div>
+  </aside>
+
+  <main id="gameWrap">
+    <canvas id="game" width="1280" height="720"></canvas>
+    <div id="overlay">
+      <div class="hud">
+        <div class="title">Run</div>
+        <div class="stat"><span>Wave</span><strong id="waveHud">1</strong></div>
+        <div class="stat"><span>Enemies</span><strong id="enemyHud">0</strong></div>
+        <div class="stat"><span>Time</span><strong id="timeHud">0.0</strong></div>
+      </div>
+      <div class="hud">
+        <div class="title">You</div>
+        <div class="stat"><span>HP</span><strong id="hpHud">100</strong></div>
+        <div class="stat"><span>XP</span><strong id="xpHud">0</strong></div>
+        <div class="stat"><span>Level</span><strong id="levelHud">1</strong></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+(() => {
+  const firebaseConfig = {
+    apiKey: "PASTE_ME",
+    authDomain: "PASTE_ME",
+    databaseURL: "PASTE_ME",
+    projectId: "PASTE_ME",
+    storageBucket: "PASTE_ME",
+    messagingSenderId: "PASTE_ME",
+    appId: "PASTE_ME"
+  };
+
+  const hasRealConfig = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("PASTE_");
+  const statusEl = document.getElementById('status');
+  function setStatus(msg) { statusEl.textContent = msg; }
+
+  if (!hasRealConfig) {
+    setStatus("This starter is ready, but Firebase is not configured yet.\n\nOpen index.html and paste your Firebase web config near the top of the script.");
+  }
+
+  let db = null;
+  if (hasRealConfig) {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+  }
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const nameInput = document.getElementById('nameInput');
+  const roomInput = document.getElementById('roomInput');
+  const hostBtn = document.getElementById('hostBtn');
+  const joinBtn = document.getElementById('joinBtn');
+  const readyBtn = document.getElementById('readyBtn');
+  const startBtn = document.getElementById('startBtn');
+  const leaveBtn = document.getElementById('leaveBtn');
+  const modeText = document.getElementById('modeText');
+  const roomText = document.getElementById('roomText');
+  const roleText = document.getElementById('roleText');
+  const playersText = document.getElementById('playersText');
+  const playerList = document.getElementById('playerList');
+  const waveHud = document.getElementById('waveHud');
+  const enemyHud = document.getElementById('enemyHud');
+  const timeHud = document.getElementById('timeHud');
+  const hpHud = document.getElementById('hpHud');
+  const xpHud = document.getElementById('xpHud');
+  const levelHud = document.getElementById('levelHud');
+
+  const WORLD = { w: 3000, h: 1800 };
+  const CONFIG = {
+    playerRadius: 16,
+    playerSpeed: 260,
+    maxHp: 100,
+    fireCooldown: 0.34,
+    bulletSpeed: 560,
+    bulletLife: 1.2,
+    enemyRadius: 14,
+    enemySpeed: 120,
+    hostTickMs: 80,
+    maxPlayers: 4
+  };
+
+  let W = 1280, H = 720;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    W = canvas.clientWidth || window.innerWidth;
+    H = canvas.clientHeight || window.innerHeight;
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const keys = Object.create(null);
+  window.addEventListener('keydown', e => {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key === ' ') e.preventDefault();
+  });
+  window.addEventListener('keyup', e => {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  const net = {
+    clientId: Math.random().toString(36).slice(2, 10),
+    roomCode: null,
+    isHost: false,
+    joined: false,
+    started: false,
+    roomMeta: null,
+    playersPresence: {},
+    inputs: {},
+    state: null,
+    unsubscribers: [],
+    hostLoop: null,
+    latestInputSeq: 0,
+    localReady: false,
+    sim: null
+  };
+
+  function randomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return s;
+  }
+
+  function roomRef(code) { return db.ref('rooms/' + code); }
+  function metaRef(code) { return db.ref('rooms/' + code + '/meta'); }
+  function playersRef(code) { return db.ref('rooms/' + code + '/players'); }
+  function inputsRef(code) { return db.ref('rooms/' + code + '/inputs'); }
+  function inputRef(code, clientId) { return db.ref('rooms/' + code + '/inputs/' + clientId); }
+  function playerRef(code, clientId) { return db.ref('rooms/' + code + '/players/' + clientId); }
+  function stateRef(code) { return db.ref('rooms/' + code + '/state'); }
+
+  function defaultPlayerState(clientId, name, x, y) {
+    return {
+      id: clientId,
+      name: name || 'Hunter',
+      x, y,
+      hp: CONFIG.maxHp,
+      maxHp: CONFIG.maxHp,
+      xp: 0,
+      level: 1,
+      fireCd: Math.random() * 0.2,
+      burstCd: 0,
+      color: colorForId(clientId)
+    };
+  }
+
+  function colorForId(id) {
+    const colors = ['#7dff9a','#8ed5ff','#ffbe72','#d59cff'];
+    let n = 0;
+    for (let i = 0; i < id.length; i++) n += id.charCodeAt(i);
+    return colors[n % colors.length];
+  }
+
+  function createInitialSim(hostName) {
+    const simPlayers = {};
+    simPlayers[net.clientId] = defaultPlayerState(net.clientId, hostName, WORLD.w / 2, WORLD.h / 2);
+    return {
+      tick: 0,
+      started: false,
+      time: 0,
+      wave: 1,
+      enemySpawnCd: 1.5,
+      players: simPlayers,
+      enemies: [],
+      bullets: []
+    };
+  }
+
+  function safeName() {
+    return (nameInput.value || 'Hunter').trim().slice(0, 20) || 'Hunter';
+  }
+
+  async function createRoom() {
+    if (!db) return setStatus('Paste Firebase config first.');
+    if (net.joined) await leaveRoom();
+    net.roomCode = randomCode();
+    net.isHost = true;
+    net.joined = true;
+    net.started = false;
+    net.localReady = false;
+    net.sim = createInitialSim(safeName());
+
+    const room = roomRef(net.roomCode);
+    await room.set({
+      meta: {
+        hostId: net.clientId,
+        started: false,
+        createdAt: firebase.database.ServerValue.TIMESTAMP
+      },
+      players: {
+        [net.clientId]: {
+          id: net.clientId,
+          name: safeName(),
+          ready: false,
+          joinedAt: firebase.database.ServerValue.TIMESTAMP
+        }
+      },
+      inputs: {
+        [net.clientId]: { up:false, down:false, left:false, right:false, burst:false, seq:0 }
+      },
+      state: net.sim
+    });
+
+    try {
+      playerRef(net.roomCode, net.clientId).onDisconnect().remove();
+      inputRef(net.roomCode, net.clientId).onDisconnect().remove();
+    } catch {}
+    subscribeRoom();
+    updateUi();
+    setStatus('Room created. Share code: ' + net.roomCode);
+  }
+
+  async function joinRoom() {
+    if (!db) return setStatus('Paste Firebase config first.');
+    const code = roomInput.value.trim().toUpperCase();
+    if (!code) return setStatus('Enter a room code first.');
+    if (net.joined) await leaveRoom();
+
+    const snap = await roomRef(code).get();
+    if (!snap.exists()) return setStatus('Room not found.');
+    const room = snap.val();
+    const players = room.players || {};
+    if (Object.keys(players).length >= CONFIG.maxPlayers) return setStatus('Room is full.');
+
+    net.roomCode = code;
+    net.isHost = room.meta && room.meta.hostId === net.clientId;
+    net.joined = true;
+    net.started = !!(room.meta && room.meta.started);
+    net.localReady = false;
+    net.sim = null;
+
+    await playerRef(code, net.clientId).set({
+      id: net.clientId,
+      name: safeName(),
+      ready: false,
+      joinedAt: firebase.database.ServerValue.TIMESTAMP
+    });
+    await inputRef(code, net.clientId).set({ up:false, down:false, left:false, right:false, burst:false, seq:0 });
+    try {
+      playerRef(code, net.clientId).onDisconnect().remove();
+      inputRef(code, net.clientId).onDisconnect().remove();
+    } catch {}
+
+    subscribeRoom();
+    updateUi();
+    setStatus('Joined room ' + code + '.');
+  }
+
+  async function leaveRoom() {
+    clearSubscriptions();
+    if (db && net.roomCode) {
+      try { await playerRef(net.roomCode, net.clientId).remove(); } catch {}
+      try { await inputRef(net.roomCode, net.clientId).remove(); } catch {}
+    }
+    net.roomCode = null;
+    net.isHost = false;
+    net.joined = false;
+    net.started = false;
+    net.roomMeta = null;
+    net.playersPresence = {};
+    net.inputs = {};
+    net.state = null;
+    net.sim = null;
+    net.localReady = false;
+    updateUi();
+    setStatus('Left room.');
+  }
+
+  function clearSubscriptions() {
+    net.unsubscribers.forEach(fn => fn());
+    net.unsubscribers = [];
+    if (net.hostLoop) clearInterval(net.hostLoop);
+    net.hostLoop = null;
+  }
+
+  function subscribeRoom() {
+    clearSubscriptions();
+    const code = net.roomCode;
+    if (!code) return;
+
+    const onMeta = snap => {
+      net.roomMeta = snap.val() || {};
+      net.started = !!net.roomMeta.started;
+      if (net.joined && net.roomMeta.hostId && net.roomMeta.hostId === net.clientId) net.isHost = true;
+      updateUi();
+    };
+    metaRef(code).on('value', onMeta);
+    net.unsubscribers.push(() => metaRef(code).off('value', onMeta));
+
+    const onPlayers = snap => {
+      net.playersPresence = snap.val() || {};
+      updateUi();
+      if (net.isHost && net.sim) syncSimPlayersToPresence();
+    };
+    playersRef(code).on('value', onPlayers);
+    net.unsubscribers.push(() => playersRef(code).off('value', onPlayers));
+
+    const onInputs = snap => { net.inputs = snap.val() || {}; };
+    inputsRef(code).on('value', onInputs);
+    net.unsubscribers.push(() => inputsRef(code).off('value', onInputs));
+
+    const onState = snap => { net.state = snap.val() || null; };
+    stateRef(code).on('value', onState);
+    net.unsubscribers.push(() => stateRef(code).off('value', onState));
+
+    if (net.isHost) {
+      if (!net.sim) net.sim = createInitialSim(safeName());
+      syncSimPlayersToPresence();
+      net.hostLoop = setInterval(hostTick, CONFIG.hostTickMs);
+    }
+  }
+
+  function syncSimPlayersToPresence() {
+    if (!net.sim) return;
+    const presentIds = new Set(Object.keys(net.playersPresence || {}));
+    for (const [id, presence] of Object.entries(net.playersPresence || {})) {
+      if (!net.sim.players[id]) {
+        const angle = Object.keys(net.sim.players).length * 1.3;
+        net.sim.players[id] = defaultPlayerState(
+          id,
+          presence.name || 'Hunter',
+          WORLD.w / 2 + Math.cos(angle) * 50,
+          WORLD.h / 2 + Math.sin(angle) * 50
+        );
+      } else {
+        net.sim.players[id].name = presence.name || net.sim.players[id].name;
+      }
+    }
+    for (const id of Object.keys(net.sim.players)) {
+      if (!presentIds.has(id)) delete net.sim.players[id];
+    }
+  }
+
+  async function toggleReady() {
+    if (!db || !net.joined) return;
+    net.localReady = !net.localReady;
+    await playerRef(net.roomCode, net.clientId).update({ ready: net.localReady });
+    setStatus(net.localReady ? 'Ready.' : 'Not ready.');
+  }
+
+  async function startMatch() {
+    if (!db || !net.joined || !net.isHost) return;
+    const ids = Object.keys(net.playersPresence || {});
+    const notReady = ids.filter(id => !net.playersPresence[id].ready && id !== net.clientId);
+    if (notReady.length) return setStatus('Waiting on: ' + notReady.map(id => net.playersPresence[id].name || id).join(', '));
+
+    net.sim.started = true;
+    await metaRef(net.roomCode).update({ started: true, startedAt: firebase.database.ServerValue.TIMESTAMP });
+    await stateRef(net.roomCode).set(net.sim);
+    setStatus('Match started.');
+  }
+
+  function gatherLocalInput() {
+    return {
+      up: !!keys['w'],
+      down: !!keys['s'],
+      left: !!keys['a'],
+      right: !!keys['d'],
+      burst: !!keys[' ']
+    };
+  }
+
+  async function sendInput() {
+    if (!db || !net.joined || !net.roomCode) return;
+    net.latestInputSeq += 1;
+    const payload = Object.assign(gatherLocalInput(), { seq: net.latestInputSeq, ts: Date.now() });
+    try {
+      await inputRef(net.roomCode, net.clientId).set(payload);
+    } catch (err) {
+      setStatus('Input write failed: ' + err.message);
+    }
+  }
+  setInterval(sendInput, 90);
+
+  function hostTick() {
+    if (!net.isHost || !net.sim || !net.joined) return;
+    syncSimPlayersToPresence();
+
+    const dt = CONFIG.hostTickMs / 1000;
+    const sim = net.sim;
+
+    if (!sim.started) {
+      sim.tick++;
+      stateRef(net.roomCode).set(sim);
+      return;
+    }
+
+    sim.tick++;
+    sim.time += dt;
+
+    for (const player of Object.values(sim.players)) {
+      const input = net.inputs[player.id] || { up:false, down:false, left:false, right:false, burst:false };
+      let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+      const len = Math.hypot(dx, dy) || 1;
+      if (dx || dy) { dx /= len; dy /= len; }
+      player.x += dx * CONFIG.playerSpeed * dt;
+      player.y += dy * CONFIG.playerSpeed * dt;
+      player.x = clamp(player.x, 0, WORLD.w);
+      player.y = clamp(player.y, 0, WORLD.h);
+
+      player.fireCd -= dt;
+      player.burstCd = Math.max(0, player.burstCd - dt);
+
+      const nearest = findNearestEnemy(player.x, player.y, sim.enemies);
+      if (nearest && player.fireCd <= 0) {
+        const ang = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+        sim.bullets.push({
+          x: player.x, y: player.y,
+          vx: Math.cos(ang) * CONFIG.bulletSpeed,
+          vy: Math.sin(ang) * CONFIG.bulletSpeed,
+          life: CONFIG.bulletLife,
+          r: 5,
+          ownerId: player.id,
+          damage: 10 + (player.level - 1) * 2
+        });
+        player.fireCd = CONFIG.fireCooldown;
+      }
+
+      if (input.burst && player.burstCd <= 0) {
+        for (let i = 0; i < 8; i++) {
+          const ang = i / 8 * Math.PI * 2;
+          sim.bullets.push({
+            x: player.x, y: player.y,
+            vx: Math.cos(ang) * (CONFIG.bulletSpeed * 0.8),
+            vy: Math.sin(ang) * (CONFIG.bulletSpeed * 0.8),
+            life: 0.7,
+            r: 4,
+            ownerId: player.id,
+            damage: 7 + player.level
+          });
+        }
+        player.burstCd = 4;
+      }
+    }
+
+    sim.enemySpawnCd -= dt;
+    const targetEnemyCount = 4 + sim.wave * 2 + Math.max(0, Object.keys(sim.players).length - 1) * 2;
+    if (sim.enemySpawnCd <= 0 && sim.enemies.length < targetEnemyCount) {
+      spawnEnemy(sim);
+      sim.enemySpawnCd = Math.max(0.45, 1.5 - sim.wave * 0.06);
+    }
+
+    for (const enemy of sim.enemies) {
+      const target = findNearestPlayer(enemy.x, enemy.y, sim.players);
+      if (!target) continue;
+      const dx = target.x - enemy.x;
+      const dy = target.y - enemy.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      enemy.x += dx / dist * enemy.speed * dt;
+      enemy.y += dy / dist * enemy.speed * dt;
+      if (dist < enemy.r + CONFIG.playerRadius + 2) target.hp = Math.max(0, target.hp - enemy.damage * dt);
+    }
+
+    const survivors = [];
+    for (const bullet of sim.bullets) {
+      bullet.x += bullet.vx * dt;
+      bullet.y += bullet.vy * dt;
+      bullet.life -= dt;
+      if (bullet.life <= 0) continue;
+      let spent = false;
+      for (const enemy of sim.enemies) {
+        if (Math.hypot(enemy.x - bullet.x, enemy.y - bullet.y) <= enemy.r + bullet.r) {
+          enemy.hp -= bullet.damage;
+          spent = true;
+          if (enemy.hp <= 0) {
+            const owner = sim.players[bullet.ownerId];
+            if (owner) {
+              owner.xp += 5;
+              if (owner.xp >= owner.level * 20) {
+                owner.xp = 0;
+                owner.level++;
+                owner.maxHp += 10;
+                owner.hp = Math.min(owner.maxHp, owner.hp + 20);
+              }
+            }
+          }
+          break;
+        }
+      }
+      if (!spent) survivors.push(bullet);
+    }
+    sim.bullets = survivors;
+    sim.enemies = sim.enemies.filter(e => e.hp > 0);
+
+    const alivePlayers = Object.values(sim.players).filter(p => p.hp > 0);
+    if (!alivePlayers.length) {
+      sim.started = false;
+      for (const p of Object.values(sim.players)) {
+        p.hp = p.maxHp;
+        p.x = WORLD.w / 2;
+        p.y = WORLD.h / 2;
+      }
+      metaRef(net.roomCode).update({ started: false });
+    }
+
+    if (sim.time >= sim.wave * 22) sim.wave++;
+    stateRef(net.roomCode).set(sim);
+  }
+
+  function spawnEnemy(sim) {
+    const players = Object.values(sim.players);
+    if (!players.length) return;
+    const anchor = players[Math.floor(Math.random() * players.length)];
+    const a = Math.random() * Math.PI * 2;
+    const d = 380 + Math.random() * 180;
+    sim.enemies.push({
+      x: clamp(anchor.x + Math.cos(a) * d, 20, WORLD.w - 20),
+      y: clamp(anchor.y + Math.sin(a) * d, 20, WORLD.h - 20),
+      r: CONFIG.enemyRadius,
+      hp: 20 + sim.wave * 8,
+      speed: CONFIG.enemySpeed + sim.wave * 6,
+      damage: 12,
+      color: sim.wave % 5 === 0 ? '#ffd86b' : '#88a36e'
+    });
+  }
+
+  function findNearestEnemy(x, y, enemies) {
+    let best = null, bestD = Infinity;
+    for (const e of enemies) {
+      const d = (e.x - x) ** 2 + (e.y - y) ** 2;
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
+  function findNearestPlayer(x, y, playersObj) {
+    let best = null, bestD = Infinity;
+    for (const p of Object.values(playersObj)) {
+      if (p.hp <= 0) continue;
+      const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return best;
+  }
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  function updateUi() {
+    modeText.textContent = net.joined ? 'Online room' : 'Offline';
+    roomText.textContent = net.roomCode || '—';
+    roleText.textContent = net.joined ? (net.isHost ? 'Host' : 'Guest') : '—';
+    const presence = net.playersPresence || {};
+    const ids = Object.keys(presence);
+    playersText.textContent = String(ids.length);
+    playerList.innerHTML = ids.length
+      ? ids.map(id => {
+          const p = presence[id] || {};
+          const you = id === net.clientId ? ' (you)' : '';
+          const ready = p.ready ? 'ready' : 'not ready';
+          return '<div>' + escapeHtml((p.name || id) + you) + ' — ' + ready + '</div>';
+        }).join('')
+      : '<div>No players connected.</div>';
+
+    readyBtn.disabled = !net.joined;
+    startBtn.disabled = !(net.joined && net.isHost);
+    leaveBtn.disabled = !net.joined;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  function draw() {
+    resize();
+    ctx.clearRect(0,0,W,H);
+
+    const state = net.state || (net.sim && net.joined && net.isHost ? net.sim : null);
+    const local = state && state.players ? state.players[net.clientId] : null;
+    const camX = local ? local.x - W / 2 : WORLD.w / 2 - W / 2;
+    const camY = local ? local.y - H / 2 : WORLD.h / 2 - H / 2;
+
+    drawWorld(camX, camY);
+    if (state) {
+      for (const bullet of state.bullets || []) drawBullet(bullet, camX, camY);
+      for (const enemy of state.enemies || []) drawEnemy(enemy, camX, camY);
+      for (const player of Object.values(state.players || {})) drawPlayer(player, camX, camY);
+      waveHud.textContent = state.wave || 1;
+      enemyHud.textContent = (state.enemies || []).length;
+      timeHud.textContent = (state.time || 0).toFixed(1);
+      if (local) {
+        hpHud.textContent = Math.ceil(local.hp);
+        xpHud.textContent = String(local.xp || 0);
+        levelHud.textContent = String(local.level || 1);
+      }
+    } else {
+      ctx.fillStyle = '#eaf9ef';
+      ctx.font = '20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Create or join a room after adding Firebase config.', W / 2, H / 2);
+    }
+    requestAnimationFrame(draw);
+  }
+
+  function drawWorld(camX, camY) {
+    ctx.fillStyle = '#09120d';
+    ctx.fillRect(0,0,W,H);
+    ctx.save();
+    ctx.translate(-camX, -camY);
+    for (let x = 0; x < WORLD.w; x += 80) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.beginPath();
+      ctx.moveTo(x, 0); ctx.lineTo(x, WORLD.h); ctx.stroke();
+    }
+    for (let y = 0; y < WORLD.h; y += 80) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.beginPath();
+      ctx.moveTo(0, y); ctx.lineTo(WORLD.w, y); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(160,255,190,0.14)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(0,0,WORLD.w,WORLD.h);
+    ctx.restore();
+  }
+
+  function drawPlayer(p, camX, camY) {
+    const x = p.x - camX, y = p.y - camY;
+    ctx.beginPath();
+    ctx.arc(x, y, CONFIG.playerRadius, 0, Math.PI * 2);
+    ctx.fillStyle = p.color || '#7dff9a';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,.5)';
+    ctx.stroke();
+    ctx.fillStyle = '#eaf9ef';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.name || 'Hunter', x, y - 26);
+    ctx.fillStyle = 'rgba(0,0,0,.45)';
+    ctx.fillRect(x - 22, y + 20, 44, 6);
+    ctx.fillStyle = p.hp > 30 ? '#7dff9a' : '#ff8d8d';
+    ctx.fillRect(x - 22, y + 20, 44 * Math.max(0, p.hp / p.maxHp), 6);
+  }
+
+  function drawEnemy(e, camX, camY) {
+    const x = e.x - camX, y = e.y - camY;
+    ctx.beginPath();
+    ctx.arc(x, y, e.r, 0, Math.PI * 2);
+    ctx.fillStyle = e.color || '#88a36e';
+    ctx.fill();
+  }
+
+  function drawBullet(b, camX, camY) {
+    const x = b.x - camX, y = b.y - camY;
+    ctx.beginPath();
+    ctx.arc(x, y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#d7ff85';
+    ctx.fill();
+  }
+
+  hostBtn.addEventListener('click', createRoom);
+  joinBtn.addEventListener('click', joinRoom);
+  readyBtn.addEventListener('click', toggleReady);
+  startBtn.addEventListener('click', startMatch);
+  leaveBtn.addEventListener('click', leaveRoom);
+  roomInput.addEventListener('input', () => {
+    roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  });
+
+  updateUi();
+  draw();
+})();
+</script>
+</body>
+</html>
